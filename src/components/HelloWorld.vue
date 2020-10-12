@@ -10,19 +10,28 @@
         <el-button type="primary" @click="closeLink">退出游戏</el-button>
       </div>
       <div v-for="(item, index) in zhuozi" :key="index" class="zhuozi">
-        <!-- 左边座位 -->
-        <div v-if="item.user1" class="enter_left">
-          <!--<img src="../assets/user.jpg" width="50px" height="50px">-->
-          {{item.user1}}
+        <!-- 左边座位有人 -->
+        <div v-if="item.user1">
+          <img src="../assets/user.jpg" width="50px" height="50px" class="leftImg">
+          <div class="enter_left">{{item.user1}}</div>
         </div>
-        <div v-else class="enter_left" @click="enter(index)">加入</div>
-        <img src="../assets/table.jpg" width="100px" height="100px">
-        <!-- 右边座位 -->
-        <div v-if="item.user2" class="enter_right">
-          <!--<img src="../assets/user.jpg" width="50px" height="50px">-->
-          {{item.user2}}
+        <!-- 左边座位无人 -->
+        <div v-else>
+          <img src="../assets/seat.jpg" width="50px" height="50px" class="leftImg" @click="enter(index)">
+          <div class="enter_left" @click="enter(index)">加入</div>
         </div>
-        <div v-else class="enter_right" @click="enter(index)">加入</div>
+        <!-- 中间的棋盘 -->
+        <img src="../assets/table.jpg" width="100px" height="100px" class="centerImg">
+        <!-- 右边座位有人 -->
+        <div v-if="item.user2">
+          <img src="../assets/user.jpg" width="50px" height="50px" class="rightImg">
+          <div class="enter_right">{{item.user2}}</div>
+        </div>
+        <!-- 右边座位无人 -->
+        <div v-else>
+          <img src="../assets/seat.jpg" width="50px" height="50px" class="rightImg" @click="enter(index)">
+          <div class="enter_right" @click="enter(index)">加入</div>
+        </div>
       </div>
     </div>
     <div v-if="linkSuccess">
@@ -47,12 +56,9 @@
           {{!qzColor ? '' : (qzColor === 'black' ? '白棋' : '黑棋')}}
         </div>
       </div>
-      <div v-if="!otherName" class="reBegin">
-        <el-button type="primary" @click="quit">退出</el-button>
-      </div>
       <div v-if="end" class="reBegin">
-        <el-button type="primary" @click="reBegin">重新开始</el-button>
-        <el-button class="end" type="primary" @click="seatUp">不玩了</el-button>
+        <el-button v-if="otherName" type="primary" @click="reBegin">开始</el-button>
+        <el-button class="end" type="primary" @click="seatUp">退出</el-button>
       </div>
     </div>
   </div>
@@ -83,12 +89,13 @@ export default {
         y: -1,
         color: ''
       },
-      end: false, //游戏是否结束
+      end: true, //游戏是否结束
       zhuohaoNum: 3, //总桌号
       zhuozi: [], //桌子的数据,包含user1,user2
       showQQGame: false, //跳转到QQ游戏
       zhuohao: -1, //桌号
-      hasSeat: false //是否坐下了
+      hasSeat: false, //是否坐下了
+      hasClickBegin: false //第一次坐下是否点击了开始
     }
   },
   mounted () {
@@ -116,7 +123,7 @@ export default {
         })
       }
     },
-    //加入游戏
+    //点击桌子加入游戏
     enter (index) {
       this.zhuohao = index
       this.socket.send(JSON.stringify({
@@ -125,11 +132,7 @@ export default {
         zhuohao: this.zhuohao
       }))
       this.hasSeat = true
-    },
-    //退出该桌
-    quit () {
-      this.seatUp()
-      this.zhuohao = -1
+      this.end = true
     },
     init () {
       if (typeof(WebSocket) === 'undefined') {
@@ -198,6 +201,13 @@ export default {
               this.$set(this.zhuozi, item, man)
             }
           }
+          //如果有用户离开了桌子
+          if (!this.zhuozi[this.zhuohao].user1 || !this.zhuozi[this.zhuohao].user2) {
+            this.otherName = ''
+            this.end = true
+          }
+        } else if (code === 208) { //发送对手名字,在2个玩家到齐后使用
+          this.otherName = text
         }
       }
     },
@@ -280,7 +290,6 @@ export default {
     //将用户点击的坐标发送给服务器
     sendPosition (x, y) {
       if (this.qzColor <= 0) {
-        this.$message.error('对手还没来哦,别急')
         return
       }
       if (!this.end) { //游戏未结束
@@ -447,7 +456,6 @@ export default {
       this.end = false
       this.initQp()
       this.qzColor = ''
-      this.otherName = ''
       this.turnToYou = false
       this.lastPosition.x = -1
       this.lastPosition.y = -1
@@ -551,8 +559,8 @@ export default {
   width: 80px;
   height: 30px;
   position: relative;
-  left: 20px;
-  top: 70px;
+  left: 13px;
+  top: 50px;
   border: 1px solid black;
   cursor: pointer;
   line-height: 30px;
@@ -561,10 +569,29 @@ export default {
   width: 80px;
   height: 30px;
   position: relative;
-  right: -230px;
-  top: -65px;
+  right: -235px;
+  top: -140px;
   border: 1px solid black;
   cursor: pointer;
   line-height: 30px;
+}
+.leftImg {
+  position: relative;
+  left: -109px;
+  top: 40px;
+  border: 1px solid black;
+  cursor: pointer;
+}
+.rightImg {
+  position: relative;
+  left: 110px;
+  top: -150px;
+  border: 1px solid black;
+  cursor: pointer;
+}
+.centerImg {
+  position: relative;
+  left: 0px;
+  top: -50px;
 }
 </style>
