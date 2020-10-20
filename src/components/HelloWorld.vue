@@ -56,9 +56,10 @@
           {{!qzColor ? '' : (qzColor === 'black' ? '白棋' : '黑棋')}}
         </div>
       </div>
+      <el-button class="reBegin" v-if="canHuiqi" type="primary" @click="clickTohuiqi">悔棋</el-button>
       <div v-if="end" class="reBegin">
-        <el-button v-if="otherName" type="primary" @click="reBegin">开始</el-button>
-        <el-button class="end" type="primary" @click="seatUp">退出</el-button>
+        <el-button v-if="otherName" class="end" type="primary" @click="reBegin">开始</el-button>
+        <el-button type="primary" @click="seatUp">退出</el-button>
       </div>
     </div>
   </div>
@@ -95,15 +96,27 @@ export default {
       showQQGame: false, //跳转到QQ游戏
       zhuohao: -1, //桌号
       hasSeat: false, //是否坐下了
-      hasClickBegin: false //第一次坐下是否点击了开始
+      hasClickBegin: false, //第一次坐下是否点击了开始
+      historyArr: [] //记录下棋的顺序
     }
   },
   mounted () {
     this.initQp()
     this.initZhuozi()
   },
+  computed: {
+    canHuiqi () { //是否能悔棋
+      let yes = false 
+      this.historyArr.forEach(item => {
+        if (item.qzColor === this.qzColor) {
+          yes = true
+        }
+      })
+      return yes
+    }
+  },
   methods: {
-    //重置棋盘
+    //重置棋盘和清空下棋的历史顺序
     initQp () {
       this.qp = []
       for (let i = 0; i < 15; i++) {
@@ -113,6 +126,7 @@ export default {
         }
         this.qp.push(arr)
       }
+      this.historyArr = []
     },
     //初始化桌子
     initZhuozi() {
@@ -202,12 +216,45 @@ export default {
             }
           }
           //如果有用户离开了桌子
-          if (!this.zhuozi[this.zhuohao].user1 || !this.zhuozi[this.zhuohao].user2) {
+          if (this.zhuozi[this.zhuohao] && (!this.zhuozi[this.zhuohao].user1 || !this.zhuozi[this.zhuohao].user2)) {
             this.otherName = ''
             this.end = true
           }
         } else if (code === 208) { //发送对手名字,在2个玩家到齐后使用
           this.otherName = text
+        } else if (code === 210) { //悔棋信息
+          this.turnToYou = text === this.qzColor
+          while (this.historyArr.length > 0) {
+            let his = this.historyArr.pop() //从下棋历史中删除这个记录
+            let temp = this.qp[his.x]
+            temp[his.y] = -1
+            this.$set(this.qp, his.x, temp)
+            if (his.qzColor === text) {
+              if (this.historyArr.length > 0) {
+                this.lastPosition.x = this.historyArr[this.historyArr.length - 1].x
+                this.lastPosition.y = this.historyArr[this.historyArr.length - 1].y
+                this.lastPosition.color = this.historyArr[this.historyArr.length - 1].qzColor
+              } else {
+                this.lastPosition.x = -1
+                this.lastPosition.y = -1
+                this.lastPosition.color = ''
+              }
+              return
+            }
+          }
+        } else if (code === 212) { //询问是否允许对方悔棋
+          this.$confirm('对方请求悔棋，您是否同意？确定-同意，取消-不同意')
+            .then(_ => {
+              this.socket.send(JSON.stringify({
+                username: this.username,
+                mes: 'okToHuiqi',
+                zhuohao: this.zhuohao,
+                huiqiColor: this.qzColor
+              }))
+            })
+            .catch(_ => {})
+        } else if (code === 214) { //同意悔棋
+          this.huiqi()
         }
       }
     },
@@ -278,7 +325,7 @@ export default {
       this.lastPosition.color = ''
       console.log('socket:', this.socket)
     },
-    playGame (event) { //点击棋盘(15*15)
+    playGame (event) { //点击棋盘(15行*15列)
       //位置是相对于页面左上角的点
       //一个格子大小为30px*30px
       //棋盘左上角的点的位置：clientX: 315, clientY: 35
@@ -308,8 +355,31 @@ export default {
         }
       }
     },
+    //点击悔棋按钮,发送请求悔棋消息
+    clickTohuiqi () {
+      this.socket.send(JSON.stringify({
+        username: this.username,
+        mes: 'wantToHuiqi',
+        zhuohao: this.zhuohao,
+        huiqiColor: this.qzColor
+      }))
+    },
+    //发送悔棋请求
+    huiqi () {
+      this.socket.send(JSON.stringify({
+        username: this.username,
+        mes: 'huiqi',
+        zhuohao: this.zhuohao,
+        huiqiColor: this.qzColor
+      }))
+    },
     //服务器发来的棋子坐标,棋子颜色:0-黑,1-白,-1-无,2-刚下的黑棋,3-刚下的白棋
     showOnQp (x, y, qzColor) {
+      this.historyArr.push({
+        x: x,
+        y: y,
+        qzColor: qzColor
+      })
       if (this.lastPosition.x >= 0) { //将上一步的黑棋/白棋改成黑棋/白棋的样式
         let temp = this.qp[this.lastPosition.x]
         temp[this.lastPosition.y] = this.lastPosition.color === 'black' ? 0 : 1
@@ -545,7 +615,7 @@ export default {
   left: 20px;
 }
 .end {
-  margin-left: 10px;
+  margin-right: 10px;
 }
 .zhuozi {
   width: 330px;
